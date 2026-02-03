@@ -1,0 +1,26 @@
+topic: "quantum computing"
+schedule: "0 8 * * *"       # Daily at 8 AM (cron syntax)
+max_results: 20              # Max papers to fetch from arXiv
+top_n: 5                     # Number of important papers to include in digest
+run_on_start: true           # Run a digest immediately on startup
+
+fetcher:
+  type: "arxiv"
+
+summarizer:
+  type: "anthropic"
+  model: "claude-sonnet-4-20250514"
+  api_key: "${ANTHROPIC_API_KEY}"
+  max_tokens: 4096
+
+publisher:
+  type: "stdout"             # email | web | stdout
+  email:
+    smtp_host: "smtp.gmail.com"
+    smtp_port: 587
+    username: ""
+    password: ""
+    from: ""
+    to: []
+  web:
+    addr: ":8080"
