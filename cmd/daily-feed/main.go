@@ -70,6 +70,8 @@ func main() {
 	case "web":
 		webPub = publisher.NewWebPublisher(cfg.Publisher.Web.Addr)
 		pubs = append(pubs, webPub)
+	case "discord":
+		pubs = append(pubs, publisher.NewDiscordPublisher(cfg.Publisher.Discord.WebhookURL))
 	default:
 		log.Fatalf("Unknown publisher type: %s", cfg.Publisher.Type)
 	}

@@ -18,3 +18,4 @@ jobs:
       - run: go run ./cmd/daily-feed --once
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}

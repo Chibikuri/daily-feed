@@ -32,9 +32,14 @@ type SummarizerConfig struct {
 }
 
 type PublisherConfig struct {
-	Type  string      `yaml:"type"`
-	Email EmailConfig `yaml:"email"`
-	Web   WebConfig   `yaml:"web"`
+	Type    string        `yaml:"type"`
+	Email   EmailConfig   `yaml:"email"`
+	Web     WebConfig     `yaml:"web"`
+	Discord DiscordConfig `yaml:"discord"`
+}
+
+type DiscordConfig struct {
+	WebhookURL string `yaml:"webhook_url"`
 }
 
 type EmailConfig struct {
@@ -110,9 +115,14 @@ func validate(cfg *Config) error {
 		return fmt.Errorf("config: summarizer.api_key is required (set ANTHROPIC_API_KEY env var)")
 	}
 	switch cfg.Publisher.Type {
-	case "stdout", "email", "web":
+	case "stdout", "email", "web", "discord":
 	default:
-		return fmt.Errorf("config: unsupported publisher type %q (supported: stdout, email, web)", cfg.Publisher.Type)
+		return fmt.Errorf("config: unsupported publisher type %q (supported: stdout, email, web, discord)", cfg.Publisher.Type)
+	}
+	if cfg.Publisher.Type == "discord" {
+		if cfg.Publisher.Discord.WebhookURL == "" {
+			return fmt.Errorf("config: publisher.discord.webhook_url is required for discord publisher")
+		}
 	}
 	if cfg.Publisher.Type == "email" {
 		if cfg.Publisher.Email.SMTPHost == "" {

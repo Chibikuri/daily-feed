@@ -14,7 +14,7 @@ summarizer:
   max_tokens: 4096
 
 publisher:
-  type: "stdout"             # email | web | stdout
+  type: "stdout"             # email | web | stdout | discord
   email:
     smtp_host: "smtp.gmail.com"
     smtp_port: 587
@@ -24,3 +24,5 @@ publisher:
     to: []
   web:
     addr: ":8080"
+  discord:
+    webhook_url: "${DISCORD_WEBHOOK_URL}"
