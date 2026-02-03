@@ -2,6 +2,7 @@
 
 A Go application that fetches recent academic papers from arXiv, selects the most important ones, summarizes them using Anthropic Claude, and publishes a daily digest.
 
+
 ## Requirements
 
 - Go 1.25+

@@ -1,0 +1,17 @@
+topic: "quantum computing"
+max_results: 20
+top_n: 5
+
+fetcher:
+  type: "arxiv"
+
+summarizer:
+  type: "anthropic"
+  model: "claude-sonnet-4-20250514"
+  api_key: "${ANTHROPIC_API_KEY}"
+  max_tokens: 4096
+
+publisher:
+  type: "discord"
+  discord:
+    webhook_url: "${DISCORD_WEBHOOK_URL}"
