@@ -19,6 +19,7 @@ import (
 
 func main() {
 	configPath := flag.String("config", "config.yaml", "path to config file")
+	once := flag.Bool("once", false, "run the pipeline once and exit")
 	flag.Parse()
 
 	cfg, err := config.Load(*configPath)
@@ -82,6 +83,18 @@ func main() {
 
 	// Build runner
 	r := runner.New(cfg.Topic, cfg.MaxResults, f, s, pubs)
+
+	// Single-run mode: run the pipeline once and exit
+	if *once {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		log.Println("Running digest (once mode)...")
+		if err := r.Run(ctx); err != nil {
+			log.Fatalf("Pipeline failed: %v", err)
+		}
+		log.Println("Done")
+		return
+	}
 
 	// Set up context with cancellation for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
