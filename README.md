@@ -2,6 +2,14 @@
 
 A Go application that fetches recent academic papers from arXiv, selects the most important ones, summarizes them using Anthropic Claude, and publishes a daily digest.
 
+## Continuous Integration
+
+This project uses GitHub Actions for Continuous Integration. On every push and pull request to the main branch, the workflow:
+- Verifies dependencies
+- Builds the project
+- Runs static code analysis
+- Executes tests
+- Checks code quality with golangci-lint
 
 ## Requirements
 
