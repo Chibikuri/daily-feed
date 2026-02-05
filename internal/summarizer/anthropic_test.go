@@ -1,9 +1,11 @@
 package summarizer
 
 import (
+	"context"
 	"testing"
 
 	"github.com/ryosukesatoh/daily-feed/internal/config"
+	"github.com/ryosukesatoh/daily-feed/internal/fetcher"
 )
 
 func TestAnthropicSummarizer(t *testing.T) {
@@ -27,7 +29,8 @@ func TestAnthropicSummarizer(t *testing.T) {
 	// Since we can't actually call Anthropic API in test, 
 	// just verify that the method exists and handles basic cases
 	sampleText := "Sample research abstract to summarize."
-	summary, err := s.Summarize(sampleText)
+	samplePapers := []fetcher.Paper{{Title: sampleText}}
+	summary, err := s.Summarize(context.Background(), samplePapers)
 	if err != nil {
 		t.Logf("Note: Summary generation might require a real API key")
 	}
