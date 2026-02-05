@@ -18,6 +18,7 @@ func New(cfg *config.Config) (Summarizer, error) {
 		), nil
 	default:
 		return nil, ErrUnsupportedSummarizerType
+	}
 }
 
 // ErrUnsupportedSummarizerType is returned when an unsupported summarizer type is specified
