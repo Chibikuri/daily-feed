@@ -31,7 +31,7 @@ func samplePapers() []fetcher.Paper {
 }
 
 func TestParseResponseValidJSON(t *testing.T) {
-	s := &AnthropicSummarizer{topic: "AI", topN: 5}
+	s := &AnthropicSummarizer{topic: "AI", topN: 5, language: "en"}
 	papers := samplePapers()
 
 	body := `{
@@ -68,7 +68,7 @@ func TestParseResponseValidJSON(t *testing.T) {
 }
 
 func TestParseResponseMarkdownFences(t *testing.T) {
-	s := &AnthropicSummarizer{topic: "AI", topN: 5}
+	s := &AnthropicSummarizer{topic: "AI", topN: 5, language: "en"}
 	papers := samplePapers()
 
 	body := "```json\n" + `{"overview": "Overview.", "summaries": [{"index": 1, "summary": "S1.", "key_points": []}]}` + "\n```"
@@ -83,7 +83,7 @@ func TestParseResponseMarkdownFences(t *testing.T) {
 }
 
 func TestParseResponseOutOfBoundsIndex(t *testing.T) {
-	s := &AnthropicSummarizer{topic: "AI", topN: 5}
+	s := &AnthropicSummarizer{topic: "AI", topN: 5, language: "en"}
 	papers := samplePapers()
 
 	body := `{
@@ -106,7 +106,7 @@ func TestParseResponseOutOfBoundsIndex(t *testing.T) {
 }
 
 func TestParseResponseInvalidJSON(t *testing.T) {
-	s := &AnthropicSummarizer{topic: "AI", topN: 5}
+	s := &AnthropicSummarizer{topic: "AI", topN: 5, language: "en"}
 	papers := samplePapers()
 
 	_, err := s.parseResponse("not json at all", papers)
@@ -119,7 +119,7 @@ func TestParseResponseInvalidJSON(t *testing.T) {
 }
 
 func TestBuildPromptFormat(t *testing.T) {
-	s := &AnthropicSummarizer{topic: "machine learning", topN: 3}
+	s := &AnthropicSummarizer{topic: "machine learning", topN: 3, language: "en"}
 	papers := samplePapers()
 
 	prompt := s.buildPrompt(papers)
@@ -147,8 +147,34 @@ func TestBuildPromptFormat(t *testing.T) {
 	}
 }
 
-func TestSummarizeEmptyPapers(t *testing.T) {
-	s := &AnthropicSummarizer{topic: "AI", topN: 5}
+func TestBuildPromptJapanese(t *testing.T) {
+	s := &AnthropicSummarizer{topic: "machine learning", topN: 3, language: "ja"}
+	papers := samplePapers()
+
+	prompt := s.buildPrompt(papers)
+
+	if !strings.Contains(prompt, "専門的な研究アナリスト") {
+		t.Error("Expected Japanese prompt to contain expert analyst text")
+	}
+	if !strings.Contains(prompt, "2件の最近の論文") {
+		t.Error("Expected Japanese prompt to mention number of papers")
+	}
+	if !strings.Contains(prompt, "タイトル: Paper One") {
+		t.Error("Expected Japanese prompt to contain paper title with Japanese labels")
+	}
+	if !strings.Contains(prompt, "著者: Alice, Bob") {
+		t.Error("Expected Japanese prompt to contain authors with Japanese labels")
+	}
+	if !strings.Contains(prompt, "上位3件の論文") {
+		t.Error("Expected Japanese prompt to reference topN value")
+	}
+	if !strings.Contains(prompt, "明確な要約と3-5つのキーポイント") {
+		t.Error("Expected Japanese prompt to contain key points instruction")
+	}
+}
+
+func TestSummarizeEmptyPapersEnglish(t *testing.T) {
+	s := &AnthropicSummarizer{topic: "AI", topN: 5, language: "en"}
 
 	digest, err := s.Summarize(context.Background(), nil)
 	if err != nil {
@@ -158,7 +184,25 @@ func TestSummarizeEmptyPapers(t *testing.T) {
 		t.Errorf("Expected topic 'AI', got %q", digest.Topic)
 	}
 	if digest.Overview != "No papers found for the given topic." {
-		t.Errorf("Expected default overview, got %q", digest.Overview)
+		t.Errorf("Expected English default overview, got %q", digest.Overview)
+	}
+	if len(digest.Summaries) != 0 {
+		t.Errorf("Expected 0 summaries, got %d", len(digest.Summaries))
+	}
+}
+
+func TestSummarizeEmptyPapersJapanese(t *testing.T) {
+	s := &AnthropicSummarizer{topic: "AI", topN: 5, language: "ja"}
+
+	digest, err := s.Summarize(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("Summarize with empty papers returned error: %v", err)
+	}
+	if digest.Topic != "AI" {
+		t.Errorf("Expected topic 'AI', got %q", digest.Topic)
+	}
+	if digest.Overview != "指定されたトピックに関する論文は見つかりませんでした。" {
+		t.Errorf("Expected Japanese default overview, got %q", digest.Overview)
 	}
 	if len(digest.Summaries) != 0 {
 		t.Errorf("Expected 0 summaries, got %d", len(digest.Summaries))
@@ -196,6 +240,7 @@ func TestSummarizeWithMockAPI(t *testing.T) {
 		maxTokens: 1024,
 		topN:      5,
 		topic:     "AI",
+		language:  "en",
 		client:    ts.Client(),
 	}
 
@@ -246,6 +291,7 @@ func TestSummarizeAPIError(t *testing.T) {
 		maxTokens: 1024,
 		topN:      5,
 		topic:     "AI",
+		language:  "en",
 		client:    &http.Client{Transport: &rewriteTransport{testURL: ts.URL}},
 	}
 

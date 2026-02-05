@@ -46,6 +46,7 @@ func main() {
 			cfg.Summarizer.MaxTokens,
 			cfg.TopN,
 			cfg.Topic,
+			cfg.Language,
 		)
 	default:
 		log.Fatalf("Unknown summarizer type: %s", cfg.Summarizer.Type)

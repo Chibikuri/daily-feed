@@ -11,6 +11,7 @@ import (
 
 type Config struct {
 	Topic      string           `yaml:"topic"`
+	Language   string           `yaml:"language"`
 	Schedule   string           `yaml:"schedule"`
 	MaxResults int              `yaml:"max_results"`
 	TopN       int              `yaml:"top_n"`
@@ -69,6 +70,9 @@ func expandEnvVars(s string) string {
 }
 
 func setDefaults(cfg *Config) {
+	if cfg.Language == "" {
+		cfg.Language = "en"
+	}
 	if cfg.Schedule == "" {
 		cfg.Schedule = "0 8 * * *"
 	}
@@ -104,6 +108,9 @@ func setDefaults(cfg *Config) {
 func validate(cfg *Config) error {
 	if cfg.Topic == "" {
 		return fmt.Errorf("config: topic is required")
+	}
+	if cfg.Language != "en" && cfg.Language != "ja" {
+		return fmt.Errorf("config: unsupported language %q (supported: en, ja)", cfg.Language)
 	}
 	if cfg.Fetcher.Type != "arxiv" {
 		return fmt.Errorf("config: unsupported fetcher type %q (supported: arxiv)", cfg.Fetcher.Type)

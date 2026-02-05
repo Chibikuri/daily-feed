@@ -20,16 +20,18 @@ type AnthropicSummarizer struct {
 	maxTokens int
 	topN      int
 	topic     string
+	language  string
 	client    *http.Client
 }
 
-func NewAnthropicSummarizer(apiKey, model string, maxTokens, topN int, topic string) *AnthropicSummarizer {
+func NewAnthropicSummarizer(apiKey, model string, maxTokens, topN int, topic, language string) *AnthropicSummarizer {
 	return &AnthropicSummarizer{
 		apiKey:    apiKey,
 		model:     model,
 		maxTokens: maxTokens,
 		topN:      topN,
 		topic:     topic,
+		language:  language,
 		client:    &http.Client{Timeout: 120 * time.Second},
 	}
 }
@@ -76,10 +78,14 @@ type summaryJSON struct {
 
 func (s *AnthropicSummarizer) Summarize(ctx context.Context, papers []fetcher.Paper) (*Digest, error) {
 	if len(papers) == 0 {
+		noResultsText := "No papers found for the given topic."
+		if s.language == "ja" {
+			noResultsText = "指定されたトピックに関する論文は見つかりませんでした。"
+		}
 		return &Digest{
 			Topic:    s.topic,
 			Date:     time.Now(),
-			Overview: "No papers found for the given topic.",
+			Overview: noResultsText,
 		}, nil
 	}
 
@@ -95,17 +101,51 @@ func (s *AnthropicSummarizer) Summarize(ctx context.Context, papers []fetcher.Pa
 
 func (s *AnthropicSummarizer) buildPrompt(papers []fetcher.Paper) string {
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("You are an expert research analyst. I have %d recent papers about \"%s\".\n\n", len(papers), s.topic))
+
+	if s.language == "ja" {
+		sb.WriteString(fmt.Sprintf("あなたは専門的な研究アナリストです。「%s」に関する%d件の最近の論文があります。\n\n", s.topic, len(papers)))
+	} else {
+		sb.WriteString(fmt.Sprintf("You are an expert research analyst. I have %d recent papers about \"%s\".\n\n", len(papers), s.topic))
+	}
 
 	for i, p := range papers {
 		sb.WriteString(fmt.Sprintf("--- Paper %d ---\n", i+1))
-		sb.WriteString(fmt.Sprintf("Title: %s\n", p.Title))
-		sb.WriteString(fmt.Sprintf("Authors: %s\n", strings.Join(p.Authors, ", ")))
-		sb.WriteString(fmt.Sprintf("Category: %s\n", p.Category))
-		sb.WriteString(fmt.Sprintf("Abstract: %s\n\n", p.Abstract))
+		if s.language == "ja" {
+			sb.WriteString(fmt.Sprintf("タイトル: %s\n", p.Title))
+			sb.WriteString(fmt.Sprintf("著者: %s\n", strings.Join(p.Authors, ", ")))
+			sb.WriteString(fmt.Sprintf("カテゴリ: %s\n", p.Category))
+			sb.WriteString(fmt.Sprintf("要旨: %s\n\n", p.Abstract))
+		} else {
+			sb.WriteString(fmt.Sprintf("Title: %s\n", p.Title))
+			sb.WriteString(fmt.Sprintf("Authors: %s\n", strings.Join(p.Authors, ", ")))
+			sb.WriteString(fmt.Sprintf("Category: %s\n", p.Category))
+			sb.WriteString(fmt.Sprintf("Abstract: %s\n\n", p.Abstract))
+		}
 	}
 
-	sb.WriteString(fmt.Sprintf(`Please analyze these papers and:
+	if s.language == "ja" {
+		sb.WriteString(fmt.Sprintf(`これらの論文を分析し、以下を行ってください：
+1. 「%s」における重要性と関連性でランク付けする
+2. 最も重要な上位%d件の論文を選択する
+3. 選択した各論文について、明確な要約と3-5つのキーポイントを提供する
+4. 全体の簡潔な概要を書く
+
+以下の正確な構造でJSONで応答してください：
+{
+  "overview": "最も重要なトレンドと発見についての2-3文の概要",
+  "summaries": [
+    {
+      "index": 1,
+      "summary": "論文の2-3文の要約",
+      "key_points": ["ポイント1", "ポイント2", "ポイント3"]
+    }
+  ]
+}
+
+"index"フィールドは上記リストの1ベースの論文番号である必要があります。
+有効なJSONのみで応答し、マークダウンフェンスや追加のテキストは含めないでください。`, s.topic, s.topN))
+	} else {
+		sb.WriteString(fmt.Sprintf(`Please analyze these papers and:
 1. Rank them by importance and relevance to "%s"
 2. Select the top %d most important papers
 3. For each selected paper, provide a clear summary and 3-5 key points
@@ -125,6 +165,7 @@ Respond in JSON with this exact structure:
 
 The "index" field should be the 1-based paper number from the list above.
 Respond ONLY with valid JSON, no markdown fences or additional text.`, s.topic, s.topN))
+	}
 
 	return sb.String()
 }
