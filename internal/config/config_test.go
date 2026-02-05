@@ -60,6 +60,9 @@ summarizer:
 		t.Fatalf("Failed to load config: %v", err)
 	}
 
+	if cfg.Language != "en" {
+		t.Errorf("Expected default language 'en', got '%s'", cfg.Language)
+	}
 	if cfg.Schedule != "0 8 * * *" {
 		t.Errorf("Expected default schedule '0 8 * * *', got '%s'", cfg.Schedule)
 	}
@@ -89,6 +92,54 @@ summarizer:
 	}
 	if cfg.Publisher.Email.SMTPPort != 587 {
 		t.Errorf("Expected default SMTP port 587, got %d", cfg.Publisher.Email.SMTPPort)
+	}
+}
+
+func TestLanguageValidation(t *testing.T) {
+	tests := []struct {
+		name     string
+		language string
+		wantErr  bool
+	}{
+		{"valid english", "en", false},
+		{"valid japanese", "ja", false},
+		{"invalid language", "fr", true},
+		{"invalid language", "zh", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpConfig := `
+topic: test topic
+language: ` + tt.language + `
+publisher:
+  type: stdout
+summarizer:
+  type: anthropic
+  api_key: test_api_key
+`
+			tmpfile, err := os.CreateTemp("", "language_test_*.yaml")
+			if err != nil {
+				t.Fatalf("Failed to create temp file: %v", err)
+			}
+			defer os.Remove(tmpfile.Name())
+
+			if _, err := tmpfile.Write([]byte(tmpConfig)); err != nil {
+				t.Fatalf("Failed to write temp config: %v", err)
+			}
+			tmpfile.Close()
+
+			_, err = Load(tmpfile.Name())
+			if tt.wantErr && err == nil {
+				t.Errorf("Expected error for language %s, got none", tt.language)
+			}
+			if !tt.wantErr && err != nil {
+				t.Errorf("Unexpected error for language %s: %v", tt.language, err)
+			}
+			if tt.wantErr && err != nil && !strings.Contains(err.Error(), "unsupported language") {
+				t.Errorf("Expected 'unsupported language' error, got: %v", err)
+			}
+		})
 	}
 }
 
