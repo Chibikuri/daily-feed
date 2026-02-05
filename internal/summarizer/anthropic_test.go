@@ -35,7 +35,8 @@ func TestAnthropicSummarizer(t *testing.T) {
 		t.Logf("Note: Summary generation might require a real API key")
 	}
 
-	if summary == "" && err == nil {
-		t.Error("Expected non-empty summary or an error")
+	// Check the summary is non-nil, which replaces the previous string comparison 
+	if summary == nil && err == nil {
+		t.Error("Expected a non-nil summary or an error")
 	}
 }
