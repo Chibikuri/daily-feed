@@ -18,8 +18,6 @@ var ErrUnsupportedPublisherType = fmt.Errorf("unsupported publisher type")
 // New creates a new publisher based on the configuration
 func New(cfg *config.Config) (Publisher, error) {
 	switch cfg.Publisher.Type {
-	case "slack":
-		return NewSlackPublisher(cfg.Publisher.Discord.WebhookURL), nil
 	case "discord":
 		return NewDiscordPublisher(cfg.Publisher.Discord.WebhookURL), nil
 	case "stdout":
