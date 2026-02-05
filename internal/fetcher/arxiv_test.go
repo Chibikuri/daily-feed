@@ -1,6 +1,7 @@
 package fetcher
 
 import (
+	"context"
 	"testing"
 
 	"github.com/ryosukesatoh/daily-feed/internal/config"
@@ -24,7 +25,7 @@ func TestArxivFetcher(t *testing.T) {
 		t.Fatal("Fetcher is nil")
 	}
 
-	results, err := f.Fetch()
+	results, err := f.Fetch(context.Background(), cfg.Topic, cfg.MaxResults)
 	if err != nil {
 		t.Fatalf("Fetch failed: %v", err)
 	}
