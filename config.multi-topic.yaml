@@ -1,9 +1,5 @@
-# Single topic configuration (legacy format - still supported)
-topic: "quantum computing"
-# Or use multiple topics (new format):
-# topics: ["quantum computing", "artificial intelligence"]
-
-language: "ja"                  # en for English, ja for Japanese
+topics: ["quantum computing", "artificial intelligence"]  # Multiple topics
+language: "en"                  # en for English, ja for Japanese
 schedule: "0 8 * * *"           # Daily at 8 AM (cron syntax)
 max_results: 20                 # Max papers to fetch from arXiv
 top_n: 5                        # Number of important papers to include in digest

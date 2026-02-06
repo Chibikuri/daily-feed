@@ -10,7 +10,8 @@ import (
 )
 
 type Config struct {
-	Topic      string           `yaml:"topic"`
+	Topic      string           `yaml:"topic"`      // Legacy single topic support
+	Topics     []string         `yaml:"topics"`     // New multiple topics support
 	Language   string           `yaml:"language"`
 	Schedule   string           `yaml:"schedule"`
 	MaxResults int              `yaml:"max_results"`
@@ -69,6 +70,23 @@ func expandEnvVars(s string) string {
 	})
 }
 
+// GetTopics returns the topics to be used. If Topics is specified, it takes precedence.
+// Otherwise, it returns a slice containing the single Topic for backward compatibility.
+func (c *Config) GetTopics() []string {
+	if len(c.Topics) > 0 {
+		return c.Topics
+	}
+	if c.Topic != "" {
+		return []string{c.Topic}
+	}
+	return []string{}
+}
+
+// GetTopicsString returns a comma-separated string of all topics for display purposes.
+func (c *Config) GetTopicsString() string {
+	return strings.Join(c.GetTopics(), ", ")
+}
+
 func setDefaults(cfg *Config) {
 	if cfg.Language == "" {
 		cfg.Language = "en"
@@ -106,8 +124,9 @@ func setDefaults(cfg *Config) {
 }
 
 func validate(cfg *Config) error {
-	if cfg.Topic == "" {
-		return fmt.Errorf("config: topic is required")
+	topics := cfg.GetTopics()
+	if len(topics) == 0 {
+		return fmt.Errorf("config: at least one topic is required (use 'topic' for single topic or 'topics' for multiple)")
 	}
 	if cfg.Language != "en" && cfg.Language != "ja" {
 		return fmt.Errorf("config: unsupported language %q (supported: en, ja)", cfg.Language)

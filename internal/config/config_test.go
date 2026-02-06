@@ -34,8 +34,94 @@ summarizer:
 	if cfg.Topic != "test topic" {
 		t.Errorf("Expected topic 'test topic', got '%s'", cfg.Topic)
 	}
+	topics := cfg.GetTopics()
+	if len(topics) != 1 || topics[0] != "test topic" {
+		t.Errorf("Expected topics ['test topic'], got %v", topics)
+	}
 	if cfg.Publisher.Type != "stdout" {
 		t.Errorf("Expected publisher type 'stdout', got '%s'", cfg.Publisher.Type)
+	}
+}
+
+func TestLoadConfigMultipleTopics(t *testing.T) {
+	tmpConfig := `
+topics: ["quantum computing", "artificial intelligence"]
+publisher:
+  type: stdout
+summarizer:
+  type: anthropic
+  api_key: test_api_key
+`
+	tmpfile, err := os.CreateTemp("", "config_multi_test_*.yaml")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tmpfile.Name())
+
+	if _, err := tmpfile.Write([]byte(tmpConfig)); err != nil {
+		t.Fatalf("Failed to write temp config: %v", err)
+	}
+	tmpfile.Close()
+
+	cfg, err := Load(tmpfile.Name())
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+
+	topics := cfg.GetTopics()
+	expected := []string{"quantum computing", "artificial intelligence"}
+	if len(topics) != len(expected) {
+		t.Errorf("Expected %d topics, got %d", len(expected), len(topics))
+	}
+	for i, topic := range topics {
+		if topic != expected[i] {
+			t.Errorf("Expected topic[%d] '%s', got '%s'", i, expected[i], topic)
+		}
+	}
+	
+	topicsString := cfg.GetTopicsString()
+	expectedString := "quantum computing, artificial intelligence"
+	if topicsString != expectedString {
+		t.Errorf("Expected topics string '%s', got '%s'", expectedString, topicsString)
+	}
+}
+
+func TestTopicsPrecedence(t *testing.T) {
+	// When both topic and topics are specified, topics should take precedence
+	tmpConfig := `
+topic: single topic
+topics: ["first topic", "second topic"]
+publisher:
+  type: stdout
+summarizer:
+  type: anthropic
+  api_key: test_api_key
+`
+	tmpfile, err := os.CreateTemp("", "config_precedence_test_*.yaml")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tmpfile.Name())
+
+	if _, err := tmpfile.Write([]byte(tmpConfig)); err != nil {
+		t.Fatalf("Failed to write temp config: %v", err)
+	}
+	tmpfile.Close()
+
+	cfg, err := Load(tmpfile.Name())
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+
+	topics := cfg.GetTopics()
+	expected := []string{"first topic", "second topic"}
+	if len(topics) != len(expected) {
+		t.Errorf("Expected %d topics, got %d", len(expected), len(topics))
+	}
+	for i, topic := range topics {
+		if topic != expected[i] {
+			t.Errorf("Expected topic[%d] '%s', got '%s'", i, expected[i], topic)
+		}
 	}
 }
 
@@ -166,8 +252,37 @@ summarizer:
 	if err == nil {
 		t.Fatal("Expected validation error for missing topic, got none")
 	}
-	if !strings.Contains(err.Error(), "topic is required") {
-		t.Errorf("Expected 'topic is required' error, got: %v", err)
+	if !strings.Contains(err.Error(), "at least one topic is required") {
+		t.Errorf("Expected 'at least one topic is required' error, got: %v", err)
+	}
+}
+
+func TestEmptyTopicsValidation(t *testing.T) {
+	invalidConfig := `
+topics: []
+publisher:
+  type: stdout
+summarizer:
+  type: anthropic
+  api_key: test_key
+`
+	tmpfile, err := os.CreateTemp("", "empty_topics_test_*.yaml")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tmpfile.Name())
+
+	if _, err := tmpfile.Write([]byte(invalidConfig)); err != nil {
+		t.Fatalf("Failed to write temp config: %v", err)
+	}
+	tmpfile.Close()
+
+	_, err = Load(tmpfile.Name())
+	if err == nil {
+		t.Fatal("Expected validation error for empty topics array, got none")
+	}
+	if !strings.Contains(err.Error(), "at least one topic is required") {
+		t.Errorf("Expected 'at least one topic is required' error, got: %v", err)
 	}
 }
 

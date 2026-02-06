@@ -77,7 +77,7 @@ func (d *DiscordPublisher) buildEmbeds(digest *summarizer.Digest) []discordEmbed
 
 	// Overview embed
 	overview := discordEmbed{
-		Title:       fmt.Sprintf("Daily Feed: %s", digest.Topic),
+		Title:       fmt.Sprintf("Daily Feed: %s", digest.GetTopicsString()),
 		Description: truncate(digest.Overview, 4096),
 		Color:       0x5865F2, // Discord blurple
 		Footer:      &discordEmbedFooter{Text: digest.Date.Format("2006-01-02")},

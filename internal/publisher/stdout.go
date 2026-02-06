@@ -17,7 +17,7 @@ func NewStdoutPublisher() *StdoutPublisher {
 
 func (p *StdoutPublisher) Publish(_ context.Context, digest *summarizer.Digest) error {
 	fmt.Println(strings.Repeat("=", 72))
-	fmt.Printf("Daily Feed Digest: %s\n", digest.Topic)
+	fmt.Printf("Daily Feed Digest: %s\n", digest.GetTopicsString())
 	fmt.Printf("Date: %s\n", digest.Date.Format("2006-01-02 15:04"))
 	fmt.Println(strings.Repeat("=", 72))
 	fmt.Println()
