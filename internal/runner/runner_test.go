@@ -22,6 +22,10 @@ func (m *mockFetcher) Fetch(ctx context.Context, topic string, maxResults int) (
 	return m.papers, m.err
 }
 
+func (m *mockFetcher) FetchMultiple(ctx context.Context, topics []string, maxResults int) ([]fetcher.Paper, error) {
+	return m.papers, m.err
+}
+
 type mockSummarizer struct {
 	digest *summarizer.Digest
 	err    error
