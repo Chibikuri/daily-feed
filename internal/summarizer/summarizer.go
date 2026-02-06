@@ -2,7 +2,6 @@ package summarizer
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 

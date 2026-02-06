@@ -42,7 +42,7 @@ func TestParseResponseValidJSON(t *testing.T) {
 		]
 	}`
 
-	digest, err := s.parseResponse(body, papers)
+	digest, err := s.parseResponse(body, papers, []string{"AI"})
 	if err != nil {
 		t.Fatalf("parseResponse returned error: %v", err)
 	}
@@ -73,7 +73,7 @@ func TestParseResponseMarkdownFences(t *testing.T) {
 
 	body := "```json\n" + `{"overview": "Overview.", "summaries": [{"index": 1, "summary": "S1.", "key_points": []}]}` + "\n```"
 
-	digest, err := s.parseResponse(body, papers)
+	digest, err := s.parseResponse(body, papers, []string{"AI"})
 	if err != nil {
 		t.Fatalf("parseResponse with markdown fences returned error: %v", err)
 	}
@@ -95,7 +95,7 @@ func TestParseResponseOutOfBoundsIndex(t *testing.T) {
 		]
 	}`
 
-	digest, err := s.parseResponse(body, papers)
+	digest, err := s.parseResponse(body, papers, []string{"AI"})
 	if err != nil {
 		t.Fatalf("parseResponse returned error: %v", err)
 	}
@@ -109,7 +109,7 @@ func TestParseResponseInvalidJSON(t *testing.T) {
 	s := &AnthropicSummarizer{topic: "AI", topN: 5, language: "en"}
 	papers := samplePapers()
 
-	_, err := s.parseResponse("not json at all", papers)
+	_, err := s.parseResponse("not json at all", papers, []string{"AI"})
 	if err == nil {
 		t.Fatal("Expected error for invalid JSON")
 	}
@@ -183,7 +183,7 @@ func TestSummarizeEmptyPapersEnglish(t *testing.T) {
 	if digest.Topic != "AI" {
 		t.Errorf("Expected topic 'AI', got %q", digest.Topic)
 	}
-	if digest.Overview != "No papers found for the given topic." {
+	if digest.Overview != "No papers found for the given topic(s): AI." {
 		t.Errorf("Expected English default overview, got %q", digest.Overview)
 	}
 	if len(digest.Summaries) != 0 {
@@ -201,7 +201,7 @@ func TestSummarizeEmptyPapersJapanese(t *testing.T) {
 	if digest.Topic != "AI" {
 		t.Errorf("Expected topic 'AI', got %q", digest.Topic)
 	}
-	if digest.Overview != "指定されたトピックに関する論文は見つかりませんでした。" {
+	if digest.Overview != "指定されたトピック「AI」に関する論文は見つかりませんでした。" {
 		t.Errorf("Expected Japanese default overview, got %q", digest.Overview)
 	}
 	if len(digest.Summaries) != 0 {
