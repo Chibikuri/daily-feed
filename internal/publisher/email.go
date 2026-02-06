@@ -31,7 +31,7 @@ func NewEmailPublisher(host string, port int, username, password, from string, t
 }
 
 func (p *EmailPublisher) Publish(_ context.Context, digest *summarizer.Digest) error {
-	subject := fmt.Sprintf("Daily Feed: %s - %s", digest.Topic, digest.Date.Format("2006-01-02"))
+	subject := fmt.Sprintf("Daily Feed: %s - %s", digest.GetTopicsString(), digest.Date.Format("2006-01-02"))
 	body := buildHTMLBody(digest)
 
 	msg := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/html; charset=\"UTF-8\"\r\n\r\n%s",
@@ -66,7 +66,7 @@ h2 { color: #16213e; }
 .key-points li { margin-bottom: 5px; }
 </style></head><body>`)
 
-	sb.WriteString(fmt.Sprintf("<h1>Daily Feed: %s</h1>", digest.Topic))
+	sb.WriteString(fmt.Sprintf("<h1>Daily Feed: %s</h1>", digest.GetTopicsString()))
 	sb.WriteString(fmt.Sprintf("<p><em>%s</em></p>", digest.Date.Format("January 2, 2006")))
 
 	sb.WriteString(fmt.Sprintf(`<div class="overview"><h2>Overview</h2><p>%s</p></div>`, digest.Overview))

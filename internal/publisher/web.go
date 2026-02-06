@@ -54,7 +54,7 @@ func (wp *WebPublisher) Publish(_ context.Context, digest *summarizer.Digest) er
 	wp.mu.Lock()
 	wp.latest = digest
 	wp.mu.Unlock()
-	log.Printf("Web publisher updated with new digest for %q", digest.Topic)
+	log.Printf("Web publisher updated with new digest for %q", digest.GetTopicsString())
 	return nil
 }
 

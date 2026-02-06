@@ -38,16 +38,33 @@ func main() {
 
 	// Build summarizer
 	var s summarizer.Summarizer
+	topics := cfg.GetTopics()
 	switch cfg.Summarizer.Type {
 	case "anthropic":
-		s = summarizer.NewAnthropicSummarizer(
-			cfg.Summarizer.APIKey,
-			cfg.Summarizer.Model,
-			cfg.Summarizer.MaxTokens,
-			cfg.TopN,
-			cfg.Topic,
-			cfg.Language,
-		)
+		if len(topics) > 1 {
+			s = summarizer.NewAnthropicSummarizerMultiTopic(
+				cfg.Summarizer.APIKey,
+				cfg.Summarizer.Model,
+				cfg.Summarizer.MaxTokens,
+				cfg.TopN,
+				topics,
+				cfg.Language,
+			)
+		} else {
+			// Use legacy constructor for backward compatibility
+			var topic string
+			if len(topics) > 0 {
+				topic = topics[0]
+			}
+			s = summarizer.NewAnthropicSummarizer(
+				cfg.Summarizer.APIKey,
+				cfg.Summarizer.Model,
+				cfg.Summarizer.MaxTokens,
+				cfg.TopN,
+				topic,
+				cfg.Language,
+			)
+		}
 	default:
 		log.Fatalf("Unknown summarizer type: %s", cfg.Summarizer.Type)
 	}
@@ -85,7 +102,17 @@ func main() {
 	}
 
 	// Build runner
-	r := runner.New(cfg.Topic, cfg.MaxResults, f, s, pubs)
+	var r *runner.Runner
+	if len(topics) > 1 {
+		r = runner.NewMultiTopic(topics, cfg.MaxResults, f, s, pubs)
+	} else {
+		// Use legacy constructor for backward compatibility
+		var topic string
+		if len(topics) > 0 {
+			topic = topics[0]
+		}
+		r = runner.New(topic, cfg.MaxResults, f, s, pubs)
+	}
 
 	// Single-run mode: run the pipeline once and exit
 	if *once {

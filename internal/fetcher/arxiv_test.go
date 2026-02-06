@@ -118,6 +118,78 @@ func TestFetchQueryParameters(t *testing.T) {
 	}
 }
 
+func TestFetchMultipleTopics(t *testing.T) {
+	var receivedQuery string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedQuery = r.URL.RawQuery
+		w.Header().Set("Content-Type", "application/xml")
+		w.Write([]byte(sampleAtomFeed))
+	}))
+	defer ts.Close()
+
+	f := &ArxivFetcher{
+		client:  ts.Client(),
+		baseURL: ts.URL,
+	}
+
+	topics := []string{"quantum computing", "artificial intelligence"}
+	papers, err := f.FetchMultiple(context.Background(), topics, 5)
+	if err != nil {
+		t.Fatalf("FetchMultiple returned error: %v", err)
+	}
+
+	if len(papers) != 2 {
+		t.Fatalf("Expected 2 papers, got %d", len(papers))
+	}
+
+	// Check that the query contains both topics
+	if !contains(receivedQuery, "quantum+computing") || !contains(receivedQuery, "artificial+intelligence") {
+		t.Errorf("Expected query to contain both topics, got %q", receivedQuery)
+	}
+	
+	// Check that OR logic is used
+	if !contains(receivedQuery, "OR") {
+		t.Errorf("Expected query to use OR logic, got %q", receivedQuery)
+	}
+}
+
+func TestFetchMultipleTopicsEmpty(t *testing.T) {
+	f := NewArxivFetcher()
+	
+	papers, err := f.FetchMultiple(context.Background(), []string{}, 5)
+	if err != nil {
+		t.Fatalf("FetchMultiple with empty topics returned error: %v", err)
+	}
+	
+	if len(papers) != 0 {
+		t.Errorf("Expected 0 papers for empty topics, got %d", len(papers))
+	}
+}
+
+func TestFetchMultipleTopicsSingleTopic(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		w.Write([]byte(sampleAtomFeed))
+	}))
+	defer ts.Close()
+
+	f := &ArxivFetcher{
+		client:  ts.Client(),
+		baseURL: ts.URL,
+	}
+
+	// With single topic, should delegate to Fetch method
+	topics := []string{"quantum computing"}
+	papers, err := f.FetchMultiple(context.Background(), topics, 5)
+	if err != nil {
+		t.Fatalf("FetchMultiple with single topic returned error: %v", err)
+	}
+
+	if len(papers) != 2 {
+		t.Fatalf("Expected 2 papers, got %d", len(papers))
+	}
+}
+
 func TestFetchBadStatusCode(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
