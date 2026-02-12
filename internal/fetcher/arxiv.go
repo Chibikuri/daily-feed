@@ -10,6 +10,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/ryosukesatoh/daily-feed/internal/retry"
 )
 
 // arXiv Atom feed XML structures
@@ -44,51 +46,26 @@ type arxivCategory struct {
 
 // ArxivFetcher fetches papers from the arXiv API.
 type ArxivFetcher struct {
-	client  *http.Client
-	baseURL string
+	client     *http.Client
+	baseURL    string
+	retryConfig retry.Config
 }
 
 func NewArxivFetcher() *ArxivFetcher {
 	return &ArxivFetcher{
 		client:  &http.Client{Timeout: 30 * time.Second},
 		baseURL: "http://export.arxiv.org/api/query",
+		retryConfig: retry.Config{
+			MaxRetries: 3,
+			BaseDelay:  1 * time.Second,
+		},
 	}
-}
-
-// retryWithBackoff executes a function with exponential backoff retry logic
-func (f *ArxivFetcher) retryWithBackoff(ctx context.Context, operation func(context.Context) error) error {
-	maxRetries := 3
-	baseDelay := 1 * time.Second
-	
-	for attempt := 0; attempt <= maxRetries; attempt++ {
-		err := operation(ctx)
-		if err == nil {
-			return nil
-		}
-		
-		// Don't retry on the last attempt
-		if attempt == maxRetries {
-			return fmt.Errorf("arxiv: operation failed after %d attempts: %w", maxRetries+1, err)
-		}
-		
-		// Calculate exponential backoff delay: 1s, 2s, 4s
-		delay := baseDelay * time.Duration(1<<attempt)
-		
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(delay):
-			// Continue to next attempt
-		}
-	}
-	
-	return nil // Should never reach here
 }
 
 func (f *ArxivFetcher) Fetch(ctx context.Context, topic string, maxResults int) ([]Paper, error) {
 	var papers []Paper
 	
-	err := f.retryWithBackoff(ctx, func(ctx context.Context) error {
+	err := retry.WithBackoff(ctx, f.retryConfig, func(ctx context.Context) error {
 		var err error
 		papers, err = f.fetchInternal(ctx, topic, maxResults)
 		return err
@@ -118,7 +95,11 @@ func (f *ArxivFetcher) fetchInternal(ctx context.Context, topic string, maxResul
 	}
 	defer resp.Body.Close()
 
+	// Check if status code is retryable for non-success responses
 	if resp.StatusCode != http.StatusOK {
+		if !retry.HTTPStatusRetryable(resp.StatusCode) {
+			return nil, fmt.Errorf("arxiv: unexpected status %d", resp.StatusCode)
+		}
 		return nil, fmt.Errorf("arxiv: unexpected status %d", resp.StatusCode)
 	}
 
@@ -180,7 +161,7 @@ func (f *ArxivFetcher) FetchMultiple(ctx context.Context, topics []string, maxRe
 
 	var papers []Paper
 	
-	err := f.retryWithBackoff(ctx, func(ctx context.Context) error {
+	err := retry.WithBackoff(ctx, f.retryConfig, func(ctx context.Context) error {
 		var err error
 		papers, err = f.fetchMultipleInternal(ctx, topics, maxResults)
 		return err
@@ -221,7 +202,11 @@ func (f *ArxivFetcher) fetchMultipleInternal(ctx context.Context, topics []strin
 	}
 	defer resp.Body.Close()
 
+	// Check if status code is retryable for non-success responses
 	if resp.StatusCode != http.StatusOK {
+		if !retry.HTTPStatusRetryable(resp.StatusCode) {
+			return nil, fmt.Errorf("arxiv: unexpected status %d", resp.StatusCode)
+		}
 		return nil, fmt.Errorf("arxiv: unexpected status %d", resp.StatusCode)
 	}
 

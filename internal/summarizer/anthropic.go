@@ -11,18 +11,20 @@ import (
 	"time"
 
 	"github.com/ryosukesatoh/daily-feed/internal/fetcher"
+	"github.com/ryosukesatoh/daily-feed/internal/retry"
 )
 
 // AnthropicSummarizer uses the Anthropic Messages API to summarize papers.
 type AnthropicSummarizer struct {
-	apiKey    string
-	model     string
-	maxTokens int
-	topN      int
-	topic     string   // Legacy single topic for backward compatibility
-	topics    []string // Multiple topics
-	language  string
-	client    *http.Client
+	apiKey      string
+	model       string
+	maxTokens   int
+	topN        int
+	topic       string   // Legacy single topic for backward compatibility
+	topics      []string // Multiple topics
+	language    string
+	client      *http.Client
+	retryConfig retry.Config
 }
 
 func NewAnthropicSummarizer(apiKey, model string, maxTokens, topN int, topic, language string) *AnthropicSummarizer {
@@ -35,6 +37,10 @@ func NewAnthropicSummarizer(apiKey, model string, maxTokens, topN int, topic, la
 		topics:    []string{topic}, // Initialize topics with single topic for backward compatibility
 		language:  language,
 		client:    &http.Client{Timeout: 120 * time.Second},
+		retryConfig: retry.Config{
+			MaxRetries: 3,
+			BaseDelay:  2 * time.Second,
+		},
 	}
 }
 
@@ -54,6 +60,10 @@ func NewAnthropicSummarizerMultiTopic(apiKey, model string, maxTokens, topN int,
 		topics:    topics,
 		language:  language,
 		client:    &http.Client{Timeout: 120 * time.Second},
+		retryConfig: retry.Config{
+			MaxRetries: 3,
+			BaseDelay:  2 * time.Second,
+		},
 	}
 }
 
@@ -113,36 +123,6 @@ type summaryJSON struct {
 	KeyPoints []string `json:"key_points"`
 }
 
-// retryWithBackoff executes a function with exponential backoff retry logic
-func (s *AnthropicSummarizer) retryWithBackoff(ctx context.Context, operation func(context.Context) error) error {
-	maxRetries := 3
-	baseDelay := 2 * time.Second
-	
-	for attempt := 0; attempt <= maxRetries; attempt++ {
-		err := operation(ctx)
-		if err == nil {
-			return nil
-		}
-		
-		// Don't retry on the last attempt
-		if attempt == maxRetries {
-			return fmt.Errorf("anthropic: operation failed after %d attempts: %w", maxRetries+1, err)
-		}
-		
-		// Calculate exponential backoff delay: 2s, 4s, 8s
-		delay := baseDelay * time.Duration(1<<attempt)
-		
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(delay):
-			// Continue to next attempt
-		}
-	}
-	
-	return nil // Should never reach here
-}
-
 func (s *AnthropicSummarizer) Summarize(ctx context.Context, papers []fetcher.Paper) (*Digest, error) {
 	topics := s.GetTopics()
 	topicsString := s.GetTopicsString()
@@ -163,7 +143,7 @@ func (s *AnthropicSummarizer) Summarize(ctx context.Context, papers []fetcher.Pa
 	prompt := s.buildPrompt(papers)
 
 	var body string
-	err := s.retryWithBackoff(ctx, func(ctx context.Context) error {
+	err := retry.WithBackoff(ctx, s.retryConfig, func(ctx context.Context) error {
 		var err error
 		body, err = s.callAPI(ctx, prompt)
 		return err
@@ -334,6 +314,15 @@ func (s *AnthropicSummarizer) callAPI(ctx context.Context, prompt string) (strin
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", fmt.Errorf("anthropic: failed to read response: %w", err)
+	}
+
+	// Check for HTTP errors first
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		// Non-retryable client errors should be handled differently
+		if !retry.HTTPStatusRetryable(resp.StatusCode) {
+			return "", fmt.Errorf("anthropic: API error with status %d: %s", resp.StatusCode, string(respBody))
+		}
+		return "", fmt.Errorf("anthropic: unexpected status %d", resp.StatusCode)
 	}
 
 	var apiResp anthropicResponse

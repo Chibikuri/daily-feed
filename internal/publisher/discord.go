@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ryosukesatoh/daily-feed/internal/retry"
 	"github.com/ryosukesatoh/daily-feed/internal/summarizer"
 )
 
@@ -38,8 +39,9 @@ type discordWebhookPayload struct {
 
 // DiscordPublisher publishes digests to a Discord channel via webhook.
 type DiscordPublisher struct {
-	webhookURL string
-	client     *http.Client
+	webhookURL  string
+	client      *http.Client
+	retryConfig retry.Config
 }
 
 // NewDiscordPublisher creates a new DiscordPublisher.
@@ -47,37 +49,11 @@ func NewDiscordPublisher(webhookURL string) *DiscordPublisher {
 	return &DiscordPublisher{
 		webhookURL: webhookURL,
 		client:     &http.Client{Timeout: 30 * time.Second},
+		retryConfig: retry.Config{
+			MaxRetries: 3,
+			BaseDelay:  1 * time.Second,
+		},
 	}
-}
-
-// retryWithBackoff executes a function with exponential backoff retry logic
-func (d *DiscordPublisher) retryWithBackoff(ctx context.Context, operation func(context.Context) error) error {
-	maxRetries := 3
-	baseDelay := 1 * time.Second
-	
-	for attempt := 0; attempt <= maxRetries; attempt++ {
-		err := operation(ctx)
-		if err == nil {
-			return nil
-		}
-		
-		// Don't retry on the last attempt
-		if attempt == maxRetries {
-			return fmt.Errorf("discord: operation failed after %d attempts: %w", maxRetries+1, err)
-		}
-		
-		// Calculate exponential backoff delay: 1s, 2s, 4s
-		delay := baseDelay * time.Duration(1<<attempt)
-		
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(delay):
-			// Continue to next attempt
-		}
-	}
-	
-	return nil // Should never reach here
 }
 
 // Publish sends the digest to Discord as a series of rich embeds.
@@ -86,7 +62,7 @@ func (d *DiscordPublisher) Publish(ctx context.Context, digest *summarizer.Diges
 	batches := batchEmbeds(embeds)
 
 	for i, batch := range batches {
-		err := d.retryWithBackoff(ctx, func(ctx context.Context) error {
+		err := retry.WithBackoff(ctx, d.retryConfig, func(ctx context.Context) error {
 			return d.sendWebhook(ctx, batch)
 		})
 		
@@ -204,6 +180,11 @@ func (d *DiscordPublisher) sendWebhook(ctx context.Context, embeds []discordEmbe
 	}
 	defer resp.Body.Close()
 
+	// Use HTTP status codes to determine if error is retryable
+	if !retry.HTTPStatusRetryable(resp.StatusCode) && (resp.StatusCode < 200 || resp.StatusCode >= 300) {
+		return fmt.Errorf("unexpected status %d", resp.StatusCode)
+	}
+	
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("unexpected status %d", resp.StatusCode)
 	}
