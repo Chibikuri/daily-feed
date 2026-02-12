@@ -4,7 +4,7 @@ A Go application that fetches recent academic papers from arXiv, selects the mos
 
 ## Requirements
 
-- Go 1.25+
+- Go 1.22+
 - Anthropic API key
 
 ## Installation
