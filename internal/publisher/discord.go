@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ryosukesatoh/daily-feed/internal/retry"
 	"github.com/ryosukesatoh/daily-feed/internal/summarizer"
 )
 
@@ -38,8 +39,9 @@ type discordWebhookPayload struct {
 
 // DiscordPublisher publishes digests to a Discord channel via webhook.
 type DiscordPublisher struct {
-	webhookURL string
-	client     *http.Client
+	webhookURL  string
+	client      *http.Client
+	retryConfig retry.Config
 }
 
 // NewDiscordPublisher creates a new DiscordPublisher.
@@ -47,6 +49,10 @@ func NewDiscordPublisher(webhookURL string) *DiscordPublisher {
 	return &DiscordPublisher{
 		webhookURL: webhookURL,
 		client:     &http.Client{Timeout: 30 * time.Second},
+		retryConfig: retry.Config{
+			MaxRetries: 3,
+			BaseDelay:  1 * time.Second,
+		},
 	}
 }
 
@@ -56,9 +62,14 @@ func (d *DiscordPublisher) Publish(ctx context.Context, digest *summarizer.Diges
 	batches := batchEmbeds(embeds)
 
 	for i, batch := range batches {
-		if err := d.sendWebhook(ctx, batch); err != nil {
+		err := retry.WithBackoff(ctx, d.retryConfig, func(ctx context.Context) error {
+			return d.sendWebhook(ctx, batch)
+		})
+		
+		if err != nil {
 			return fmt.Errorf("discord: failed to send batch %d: %w", i+1, err)
 		}
+		
 		// Delay between batches to avoid rate limits.
 		if i < len(batches)-1 {
 			select {
@@ -169,6 +180,11 @@ func (d *DiscordPublisher) sendWebhook(ctx context.Context, embeds []discordEmbe
 	}
 	defer resp.Body.Close()
 
+	// Use HTTP status codes to determine if error is retryable
+	if !retry.HTTPStatusRetryable(resp.StatusCode) && (resp.StatusCode < 200 || resp.StatusCode >= 300) {
+		return fmt.Errorf("unexpected status %d", resp.StatusCode)
+	}
+	
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("unexpected status %d", resp.StatusCode)
 	}

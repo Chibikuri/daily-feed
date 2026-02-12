@@ -10,6 +10,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/ryosukesatoh/daily-feed/internal/retry"
 )
 
 // arXiv Atom feed XML structures
@@ -44,18 +46,35 @@ type arxivCategory struct {
 
 // ArxivFetcher fetches papers from the arXiv API.
 type ArxivFetcher struct {
-	client  *http.Client
-	baseURL string
+	client     *http.Client
+	baseURL    string
+	retryConfig retry.Config
 }
 
 func NewArxivFetcher() *ArxivFetcher {
 	return &ArxivFetcher{
 		client:  &http.Client{Timeout: 30 * time.Second},
 		baseURL: "http://export.arxiv.org/api/query",
+		retryConfig: retry.Config{
+			MaxRetries: 3,
+			BaseDelay:  1 * time.Second,
+		},
 	}
 }
 
 func (f *ArxivFetcher) Fetch(ctx context.Context, topic string, maxResults int) ([]Paper, error) {
+	var papers []Paper
+	
+	err := retry.WithBackoff(ctx, f.retryConfig, func(ctx context.Context) error {
+		var err error
+		papers, err = f.fetchInternal(ctx, topic, maxResults)
+		return err
+	})
+	
+	return papers, err
+}
+
+func (f *ArxivFetcher) fetchInternal(ctx context.Context, topic string, maxResults int) ([]Paper, error) {
 	query := url.Values{}
 	query.Set("search_query", fmt.Sprintf("all:%s", topic))
 	query.Set("start", "0")
@@ -76,7 +95,11 @@ func (f *ArxivFetcher) Fetch(ctx context.Context, topic string, maxResults int) 
 	}
 	defer resp.Body.Close()
 
+	// Check if status code is retryable for non-success responses
 	if resp.StatusCode != http.StatusOK {
+		if !retry.HTTPStatusRetryable(resp.StatusCode) {
+			return nil, fmt.Errorf("arxiv: unexpected status %d", resp.StatusCode)
+		}
 		return nil, fmt.Errorf("arxiv: unexpected status %d", resp.StatusCode)
 	}
 
@@ -136,6 +159,18 @@ func (f *ArxivFetcher) FetchMultiple(ctx context.Context, topics []string, maxRe
 		return f.Fetch(ctx, topics[0], maxResults)
 	}
 
+	var papers []Paper
+	
+	err := retry.WithBackoff(ctx, f.retryConfig, func(ctx context.Context) error {
+		var err error
+		papers, err = f.fetchMultipleInternal(ctx, topics, maxResults)
+		return err
+	})
+	
+	return papers, err
+}
+
+func (f *ArxivFetcher) fetchMultipleInternal(ctx context.Context, topics []string, maxResults int) ([]Paper, error) {
 	// For multiple topics, we'll construct a single query that includes all topics
 	// using OR logic, then fetch more results to account for the combined search
 	query := url.Values{}
@@ -167,7 +202,11 @@ func (f *ArxivFetcher) FetchMultiple(ctx context.Context, topics []string, maxRe
 	}
 	defer resp.Body.Close()
 
+	// Check if status code is retryable for non-success responses
 	if resp.StatusCode != http.StatusOK {
+		if !retry.HTTPStatusRetryable(resp.StatusCode) {
+			return nil, fmt.Errorf("arxiv: unexpected status %d", resp.StatusCode)
+		}
 		return nil, fmt.Errorf("arxiv: unexpected status %d", resp.StatusCode)
 	}
 
