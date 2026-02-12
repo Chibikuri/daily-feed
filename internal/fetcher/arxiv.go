@@ -55,7 +55,49 @@ func NewArxivFetcher() *ArxivFetcher {
 	}
 }
 
+// retryWithBackoff executes a function with exponential backoff retry logic
+func (f *ArxivFetcher) retryWithBackoff(ctx context.Context, operation func(context.Context) error) error {
+	maxRetries := 3
+	baseDelay := 1 * time.Second
+	
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		err := operation(ctx)
+		if err == nil {
+			return nil
+		}
+		
+		// Don't retry on the last attempt
+		if attempt == maxRetries {
+			return fmt.Errorf("arxiv: operation failed after %d attempts: %w", maxRetries+1, err)
+		}
+		
+		// Calculate exponential backoff delay: 1s, 2s, 4s
+		delay := baseDelay * time.Duration(1<<attempt)
+		
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(delay):
+			// Continue to next attempt
+		}
+	}
+	
+	return nil // Should never reach here
+}
+
 func (f *ArxivFetcher) Fetch(ctx context.Context, topic string, maxResults int) ([]Paper, error) {
+	var papers []Paper
+	
+	err := f.retryWithBackoff(ctx, func(ctx context.Context) error {
+		var err error
+		papers, err = f.fetchInternal(ctx, topic, maxResults)
+		return err
+	})
+	
+	return papers, err
+}
+
+func (f *ArxivFetcher) fetchInternal(ctx context.Context, topic string, maxResults int) ([]Paper, error) {
 	query := url.Values{}
 	query.Set("search_query", fmt.Sprintf("all:%s", topic))
 	query.Set("start", "0")
@@ -136,6 +178,18 @@ func (f *ArxivFetcher) FetchMultiple(ctx context.Context, topics []string, maxRe
 		return f.Fetch(ctx, topics[0], maxResults)
 	}
 
+	var papers []Paper
+	
+	err := f.retryWithBackoff(ctx, func(ctx context.Context) error {
+		var err error
+		papers, err = f.fetchMultipleInternal(ctx, topics, maxResults)
+		return err
+	})
+	
+	return papers, err
+}
+
+func (f *ArxivFetcher) fetchMultipleInternal(ctx context.Context, topics []string, maxResults int) ([]Paper, error) {
 	// For multiple topics, we'll construct a single query that includes all topics
 	// using OR logic, then fetch more results to account for the combined search
 	query := url.Values{}

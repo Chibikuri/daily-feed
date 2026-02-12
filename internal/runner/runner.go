@@ -96,14 +96,30 @@ func (r *Runner) Run(ctx context.Context) error {
 	}
 	log.Printf("Generated digest with %d summaries", len(digest.Summaries))
 
-	// Step 3: Publish
+	// Step 3: Publish - Continue with other publishers even if one fails
+	var publishErrors []error
 	for _, pub := range r.publishers {
 		log.Printf("Publishing via %T...", pub)
 		if err := pub.Publish(ctx, digest); err != nil {
-			log.Printf("WARNING: publish via %T failed: %v", pub, err)
+			publishError := fmt.Errorf("publish via %T failed: %w", pub, err)
+			publishErrors = append(publishErrors, publishError)
+			log.Printf("WARNING: %v", publishError)
+		} else {
+			log.Printf("Successfully published via %T", pub)
 		}
 	}
 
-	log.Println("Pipeline complete")
+	// If all publishers failed, return an error
+	if len(publishErrors) == len(r.publishers) && len(r.publishers) > 0 {
+		return fmt.Errorf("runner: all publishers failed: %v", publishErrors)
+	}
+
+	// If some publishers succeeded, log the failures but don't fail the pipeline
+	if len(publishErrors) > 0 {
+		log.Printf("Pipeline completed with %d publisher failures out of %d publishers", len(publishErrors), len(r.publishers))
+	} else {
+		log.Println("Pipeline completed successfully")
+	}
+	
 	return nil
 }

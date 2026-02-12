@@ -50,15 +50,50 @@ func NewDiscordPublisher(webhookURL string) *DiscordPublisher {
 	}
 }
 
+// retryWithBackoff executes a function with exponential backoff retry logic
+func (d *DiscordPublisher) retryWithBackoff(ctx context.Context, operation func(context.Context) error) error {
+	maxRetries := 3
+	baseDelay := 1 * time.Second
+	
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		err := operation(ctx)
+		if err == nil {
+			return nil
+		}
+		
+		// Don't retry on the last attempt
+		if attempt == maxRetries {
+			return fmt.Errorf("discord: operation failed after %d attempts: %w", maxRetries+1, err)
+		}
+		
+		// Calculate exponential backoff delay: 1s, 2s, 4s
+		delay := baseDelay * time.Duration(1<<attempt)
+		
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(delay):
+			// Continue to next attempt
+		}
+	}
+	
+	return nil // Should never reach here
+}
+
 // Publish sends the digest to Discord as a series of rich embeds.
 func (d *DiscordPublisher) Publish(ctx context.Context, digest *summarizer.Digest) error {
 	embeds := d.buildEmbeds(digest)
 	batches := batchEmbeds(embeds)
 
 	for i, batch := range batches {
-		if err := d.sendWebhook(ctx, batch); err != nil {
+		err := d.retryWithBackoff(ctx, func(ctx context.Context) error {
+			return d.sendWebhook(ctx, batch)
+		})
+		
+		if err != nil {
 			return fmt.Errorf("discord: failed to send batch %d: %w", i+1, err)
 		}
+		
 		// Delay between batches to avoid rate limits.
 		if i < len(batches)-1 {
 			select {

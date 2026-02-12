@@ -113,6 +113,36 @@ type summaryJSON struct {
 	KeyPoints []string `json:"key_points"`
 }
 
+// retryWithBackoff executes a function with exponential backoff retry logic
+func (s *AnthropicSummarizer) retryWithBackoff(ctx context.Context, operation func(context.Context) error) error {
+	maxRetries := 3
+	baseDelay := 2 * time.Second
+	
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		err := operation(ctx)
+		if err == nil {
+			return nil
+		}
+		
+		// Don't retry on the last attempt
+		if attempt == maxRetries {
+			return fmt.Errorf("anthropic: operation failed after %d attempts: %w", maxRetries+1, err)
+		}
+		
+		// Calculate exponential backoff delay: 2s, 4s, 8s
+		delay := baseDelay * time.Duration(1<<attempt)
+		
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(delay):
+			// Continue to next attempt
+		}
+	}
+	
+	return nil // Should never reach here
+}
+
 func (s *AnthropicSummarizer) Summarize(ctx context.Context, papers []fetcher.Paper) (*Digest, error) {
 	topics := s.GetTopics()
 	topicsString := s.GetTopicsString()
@@ -132,7 +162,13 @@ func (s *AnthropicSummarizer) Summarize(ctx context.Context, papers []fetcher.Pa
 
 	prompt := s.buildPrompt(papers)
 
-	body, err := s.callAPI(ctx, prompt)
+	var body string
+	err := s.retryWithBackoff(ctx, func(ctx context.Context) error {
+		var err error
+		body, err = s.callAPI(ctx, prompt)
+		return err
+	})
+	
 	if err != nil {
 		return nil, err
 	}
